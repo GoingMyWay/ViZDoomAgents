@@ -22,8 +22,9 @@ for gui in gui_env:
 
 from vizdoom import *
 
-import utils
-import network
+from . import utils
+from . import network
+from . import configs as cfg
 
 
 class Agent(object):
@@ -153,7 +154,7 @@ class Agent(object):
 
                     # if utils.check_play(self.env.get_state()):
                     s = self.env.get_state().screen_buffer
-                    s = utils.process_frame(s)
+                    s = utils.process_frame(s, cfg.img_dim)
                     # Take an action using probabilities from policy network output.
                     a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
                                          feed_dict={self.local_AC_network.inputs: [s]})
@@ -174,7 +175,7 @@ class Agent(object):
                         s1 = s
                     else:  # game is not finished
                         s1 = self.env.get_state().screen_buffer
-                        s1 = utils.process_frame(s1)
+                        s1 = utils.process_frame(s1, cfg.img_dim)
 
                     episode_buffer.append([s, a_index, reward, s1, d, v[0, 0]])
                     episode_values.append(v[0, 0])
@@ -250,14 +251,14 @@ class Agent(object):
 
             self.env.new_episode()
             state = self.env.get_state()
-            s = utils.process_frame(state.screen_buffer)
+            s = utils.process_frame(state.screen_buffer, cfg.img_dim)
             episode_rewards = 0
             last_total_shaping_reward = 0
             step = 0
             s_t = time.time()
             while not self.env.is_episode_finished():
                 state = self.env.get_state()
-                s = utils.process_frame(state.screen_buffer)
+                s = utils.process_frame(state.screen_buffer, cfg.img_dim)
                 a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
                                      feed_dict={self.local_AC_network.inputs: [s]})
                 # get a action_index from a_dist in self.local_AC.policy
@@ -305,14 +306,6 @@ class Agent(object):
             else:
                 # alive
                 reward = 0.01
-        elif picked_delta == 1:
-            reward = 1
-        elif picked_delta == 2:
-            reward = 2
-        elif picked_delta == 3:
-            reward = 3
-        elif picked_delta == 4:
-            reward = 4
         else:
-            return picked_delta
+            return picked_delta * 2.
         return reward
