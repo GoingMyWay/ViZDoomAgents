@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-import configs as cfg
+from . import configs as cfg
 
 DIM = 128
 LSTM_CELL_NUM = 200
