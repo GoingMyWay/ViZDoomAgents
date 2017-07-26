@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import time
-import sys
-import string
 import threading
 
 import os
@@ -12,6 +10,7 @@ from vizdoom import *
 
 from . import agent
 from . import network
+from . import configs as cfg
 
 max_episode_length = 2100
 gamma = .99  # discount rate for advantage estimation and reward discounting
@@ -19,16 +18,14 @@ s_size = 6400 # 80 * 80 * 1
 a_size = 3  # Agent can move Left, Right, or Fire
 load_model = False
 
-model_path = './healthpack_gathering/check_point'
-
 
 def main_train(tf_configs=None):
     s_t = time.time()
 
     tf.reset_default_graph()
 
-    if not os.path.exists(model_path):
-        os.makedirs(model_path)
+    if not os.path.exists(cfg.model_path):
+        os.makedirs(cfg.model_path)
 
     with tf.device("/cpu:0"):
         global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
@@ -72,8 +69,8 @@ def main_play(tf_configs=None):
 
         print('Loading Model...')
         saver = tf.train.Saver()
-        ckpt = tf.train.get_checkpoint_state(model_path)
-        saver.restore(sess, os.path.join(model_path, 'model-1750.ckpt'))
+        ckpt = tf.train.get_checkpoint_state(cfg.model_path)
+        saver.restore(sess, os.path.join(cfg.model_path, 'model-1750.ckpt'))
         print('Successfully loaded!')
 
         ag.play_game(sess, 10)
