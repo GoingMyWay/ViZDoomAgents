@@ -10,8 +10,8 @@ import tensorflow as tf
 
 from vizdoom import *
 
-import agent
-import network
+from . import agent
+from . import network
 
 max_episode_length = 2100
 gamma = .99  # discount rate for advantage estimation and reward discounting
@@ -19,7 +19,7 @@ s_size = 6400 # 80 * 80 * 1
 a_size = 3  # Agent can move Left, Right, or Fire
 load_model = False
 
-model_path = './check_point'
+model_path = './healthpack_gathering/check_point'
 
 
 def main_train(tf_configs=None):
@@ -73,7 +73,7 @@ def main_play(tf_configs=None):
         print('Loading Model...')
         saver = tf.train.Saver()
         ckpt = tf.train.get_checkpoint_state(model_path)
-        saver.restore(sess, os.path.join(model_path, 'model-250.ckpt'))
+        saver.restore(sess, os.path.join(model_path, 'model-1750.ckpt'))
         print('Successfully loaded!')
 
         ag.play_game(sess, 10)
