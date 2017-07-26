@@ -17,7 +17,7 @@ for gui in gui_env:
         print("    ", gui, "Not found")
 
 
-import configs as cfg
+from . import configs as cfg
 
 import vizdoom
 from vizdoom import *
@@ -39,12 +39,12 @@ def discount(x, gamma):
 
 
 # Processes Doom screen image to produce cropped and resized image.
-def process_frame(frame):
+def process_frame(frame, img_dim):
     img = cv2.resize(frame, (80, 80), interpolation=cv2.INTER_LINEAR)
-    img = rgb2gray(img)
+    img = rgb2gray(img, img_dim)
     return img
 
 
-def rgb2gray(rgb):
+def rgb2gray(rgb, img_dim):
     gray = np.dot(rgb[..., :3], [0.299, 0.587, 0.114])
-    return gray.reshape((cfg.img_dim, cfg.img_dim, 1))
+    return gray.reshape((img_dim, img_dim, 1))
