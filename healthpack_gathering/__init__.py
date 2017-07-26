@@ -1,5 +1,8 @@
 # coding: utf-8
+import sys
+
+sys.path.append('../')
+import utils
 from . import agent
-from . import utils
 from . import network
 from . import configs
