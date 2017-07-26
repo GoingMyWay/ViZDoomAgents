@@ -22,7 +22,7 @@ for gui in gui_env:
 
 from vizdoom import *
 
-from . import utils
+import utils
 from . import network
 from . import configs as cfg
 
