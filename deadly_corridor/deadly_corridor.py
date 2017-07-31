@@ -12,6 +12,7 @@ from vizdoom import *
 
 import agent
 import network
+import configs as cfg
 
 max_episode_length = 2100
 gamma = .99  # discount rate for advantage estimation and reward discounting
@@ -31,13 +32,14 @@ def main_train(tf_configs=None):
         os.makedirs(model_path)
 
     global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
-    optimizer = tf.train.RMSPropOptimizer(learning_rate=1e-5)
-    master_network = network.ACNetwork('global', optimizer)  # Generate global network
-    num_workers = 16
-    agents = []
-    # Create worker classes
-    for i in range(num_workers):
-        agents.append(agent.Agent(DoomGame(), i, s_size, a_size, optimizer, model_path, global_episodes))
+    with tf.device('/gpu:2'):
+        optimizer = tf.train.RMSPropOptimizer(learning_rate=1e-6)
+        master_network = network.ACNetwork('global', optimizer, shape=cfg.new_img_dim)  # Generate global network
+        num_workers = 16
+        agents = []
+        # Create worker classes
+        for i in range(num_workers):
+            agents.append(agent.Agent(DoomGame(), i, s_size, a_size, optimizer, model_path, global_episodes))
     saver = tf.train.Saver(max_to_keep=100)
 
     with tf.Session(config=tf_configs) as sess:
@@ -72,7 +74,7 @@ def main_play(tf_configs=None):
         print('Loading Model...')
         saver = tf.train.Saver()
         ckpt = tf.train.get_checkpoint_state(model_path)
-        saver.restore(sess, os.path.join(model_path, 'model-35300.ckpt'))
+        saver.restore(sess, os.path.join(model_path, 'model-200.ckpt'))
         print('Successfully loaded!')
 
         ag.play_game(sess, 10)
