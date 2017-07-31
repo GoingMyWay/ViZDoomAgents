@@ -31,32 +31,12 @@ class ACNetwork(object):
                                       kernel_size=[3, 3], stride=1, padding='SAME')
             self.fc = slim.fully_connected(slim.flatten(self.conv_3), 512, activation_fn=tf.nn.elu)
 
-            # LSTM
-            lstm_cell = tf.contrib.rnn.BasicLSTMCell(cfg.RNN_DIM, state_is_tuple=True)
-            c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
-            h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
-            self.state_init = [c_init, h_init]
-            c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
-            h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-            self.state_in = (c_in, h_in)
-            rnn_in = tf.expand_dims(self.fc, [0])
-            step_size = tf.shape(self.inputs)[:1]
-            state_in = tf.contrib.rnn.LSTMStateTuple(c_in, h_in)
-            lstm_outputs, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
-                                                         rnn_in,
-                                                         initial_state=state_in,
-                                                         sequence_length=step_size,
-                                                         time_major=False)
-            lstm_c, lstm_h = lstm_state
-            self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
-            rnn_out = tf.reshape(lstm_outputs, [-1, 256])
-
             # Output layers for policy and value estimations
-            self.policy = slim.fully_connected(rnn_out,
+            self.policy = slim.fully_connected(self.fc,
                                                cfg.ACTION_DIM,
                                                activation_fn=tf.nn.softmax,
                                                biases_initializer=None)
-            self.value = slim.fully_connected(rnn_out,
+            self.value = slim.fully_connected(self.fc,
                                               1,
                                               activation_fn=None,
                                               biases_initializer=None)
