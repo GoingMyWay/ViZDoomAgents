@@ -15,14 +15,14 @@ class ACNetwork(object):
     """
     Actor-Critic network
     """
-    def __init__(self, scope, optimizer, play=False):
+    def __init__(self, scope, optimizer, play=False, shape=(80, 80)):
         if not isinstance(optimizer, tf.train.Optimizer) and optimizer is not None:
             raise TypeError("Type Error")
-        self.__create_network(scope, optimizer, play=play)
+        self.__create_network(scope, optimizer, play=play, shape=shape)
 
-    def __create_network(self, scope, optimizer, play=False):
+    def __create_network(self, scope, optimizer, play=False, shape=(80, 80)):
         with tf.variable_scope(scope):
-            self.inputs = tf.placeholder(shape=[None, 80, 80, 1], dtype=tf.float32)
+            self.inputs = tf.placeholder(shape=[None, *shape, 1], dtype=tf.float32)
             self.conv_1 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.inputs, num_outputs=32,
                                       kernel_size=[8, 8], stride=4, padding='SAME')
             self.conv_2 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.conv_1, num_outputs=64,
