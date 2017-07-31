@@ -24,6 +24,7 @@ from vizdoom import *
 
 import utils
 import network
+import configs as cfg
 
 
 class Agent(object):
@@ -31,8 +32,6 @@ class Agent(object):
     Agent
     """
     def __init__(self, game, name, s_size, a_size, optimizer=None, model_path=None, global_episodes=None, play=False):
-        self.s_size = s_size
-        self.a_size = a_size
 
         self.summary_step = 3
 
@@ -53,11 +52,11 @@ class Agent(object):
             self.trainer = optimizer
             self.global_episodes = global_episodes
             self.increment = self.global_episodes.assign_add(1)
-            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play)
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, shape=cfg.new_img_dim)
             self.summary_writer = tf.summary.FileWriter("./summaries/deadly_corridor/agent_%s" % str(self.number))
             self.update_local_ops = tf.group(*utils.update_target_graph('global', self.name))
         else:
-            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play)
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, shape=cfg.new_img_dim)
         if not isinstance(game, DoomGame):
             raise TypeError("Type Error")
 
@@ -66,7 +65,7 @@ class Agent(object):
         # game.set_doom_scenario_path('../scenarios/deadly_corridor.cfg')
         game.load_config("../scenarios/deadly_corridor.cfg")
         # game.set_doom_map("map01")
-        game.set_screen_resolution(ScreenResolution.RES_640X480)
+        game.set_screen_resolution(ScreenResolution.RES_400X225)
         game.set_screen_format(ScreenFormat.RGB24)
         game.set_render_hud(False)
         game.set_render_crosshair(False)
@@ -158,7 +157,7 @@ class Agent(object):
                 while not self.env.is_episode_finished():
 
                     s = self.env.get_state().screen_buffer
-                    s = utils.process_frame(s)
+                    s = utils.process_frame(s, cfg.new_img_dim)
                     # Take an action using probabilities from policy network output.
                     a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
                                          feed_dict={self.local_AC_network.inputs: [s]})
@@ -186,7 +185,7 @@ class Agent(object):
                         s1 = s
                     else:  # game is not finished
                         s1 = self.env.get_state().screen_buffer
-                        s1 = utils.process_frame(s1)
+                        s1 = utils.process_frame(s1, cfg.new_img_dim)
 
                     episode_buffer.append([s, a_index, reward, s1, d, v[0, 0]])
                     episode_values.append(v[0, 0])
@@ -265,7 +264,7 @@ class Agent(object):
 
             self.env.new_episode()
             state = self.env.get_state()
-            s = utils.process_frame(state.screen_buffer)
+            s = utils.process_frame(state.screen_buffer, cfg.new_img_dim)
             episode_rewards = 0
             last_total_shaping_reward = 0
             step = 0
@@ -273,7 +272,7 @@ class Agent(object):
 
             while not self.env.is_episode_finished():
                 state = self.env.get_state()
-                s = utils.process_frame(state.screen_buffer)
+                s = utils.process_frame(state.screen_buffer, cfg.new_img_dim)
                 a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
                                      feed_dict={self.local_AC_network.inputs: [s]})
                 # get a action_index from a_dist in self.local_AC.policy
