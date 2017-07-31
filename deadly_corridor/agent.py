@@ -108,22 +108,19 @@ class Agent(object):
         # Here we take the rewards and values from the rollout, and use them to
         # generate the advantage and discounted returns.
         # The advantage function uses "Generalized Advantage Estimation"
-        self.rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
-        discounted_rewards = utils.discount(self.rewards_plus, gamma)[:-1]
-        self.value_plus = np.asarray(values.tolist() + [bootstrap_value])
-        advantages = rewards + gamma * self.value_plus[1:] - self.value_plus[:-1]
+        rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
+        discounted_rewards = utils.discount(rewards_plus, gamma)[:-1]
+        value_plus = np.asarray(values.tolist() + [bootstrap_value])
+        advantages = rewards + gamma * value_plus[1:] - value_plus[:-1]
         advantages = utils.discount(advantages, gamma)
 
         # Update the global network using gradients from loss
         # Generate network statistics to periodically save
-        rnn_state = self.local_AC_network.state_init
         feed_dict = {
             self.local_AC_network.target_v: discounted_rewards,
             self.local_AC_network.inputs: np.stack(observations),
             self.local_AC_network.actions: actions,
-            self.local_AC_network.advantages: advantages,
-            self.local_AC_network.state_in[0]: rnn_state[0],
-            self.local_AC_network.state_in[1]: rnn_state[1]
+            self.local_AC_network.advantages: advantages
         }
         l, v_l, p_l, e_l, g_n, v_n, _ = sess.run([
                                             self.local_AC_network.loss,
@@ -157,21 +154,14 @@ class Agent(object):
                 last_total_kills = 0
                 self.env.new_episode()
                 episode_st = time.time()
-                rnn_state = self.local_AC_network.state_init
 
                 while not self.env.is_episode_finished():
 
                     s = self.env.get_state().screen_buffer
                     s = utils.process_frame(s)
                     # Take an action using probabilities from policy network output.
-                    a_dist, v, rnn_state = sess.run(
-                        [self.local_AC_network.policy,
-                         self.local_AC_network.value,
-                         self.local_AC_network.state_out],
-                        feed_dict={self.local_AC_network.inputs: [s],
-                                   self.local_AC_network.state_in[0]: rnn_state[0],
-                                   self.local_AC_network.state_in[1]: rnn_state[1]}
-                        )
+                    a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
+                                         feed_dict={self.local_AC_network.inputs: [s]})
                     # get a action_index from a_dist in self.local_AC.policy
                     a_index = self.choose_action_index(a_dist[0], deterministic=False)
                     # make an action
@@ -183,7 +173,7 @@ class Agent(object):
                     health_delta = self.env.get_game_variable(GameVariable.HEALTH) - last_total_health
                     last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
 
-                    health_reward = self.health_reward_function(health_delta, episode_step_count)
+                    health_reward = self.health_reward_function(health_delta)
                     ammo2_reward = self.ammo2_reward_function(ammo2_delta)
 
                     kill_reward, last_total_kills = self.kills_reward_function(last_total_kills)
@@ -210,9 +200,7 @@ class Agent(object):
                         # Since we don't know what the true final return is,
                         # we "bootstrap" from our current value estimation.
                         v1 = sess.run(self.local_AC_network.value,
-                                      feed_dict={self.local_AC_network.inputs: [s],
-                                                 self.local_AC_network.state_in[0]: rnn_state[0],
-                                                 self.local_AC_network.state_in[1]: rnn_state[1]})[0, 0]
+                                      feed_dict={self.local_AC_network.inputs: [s]})[0, 0]
                         l, v_l, p_l, e_l, g_n, v_n = self.infer(episode_buffer, sess, gamma, v1)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
@@ -282,19 +270,12 @@ class Agent(object):
             last_total_shaping_reward = 0
             step = 0
             s_t = time.time()
-            rnn_state = self.local_AC_network.state_init
 
             while not self.env.is_episode_finished():
                 state = self.env.get_state()
                 s = utils.process_frame(state.screen_buffer)
-                a_dist, v, rnn_state = sess.run(
-                    [self.local_AC_network.policy,
-                     self.local_AC_network.value,
-                     self.local_AC_network.state_out],
-                    feed_dict={self.local_AC_network.inputs: [s],
-                               self.local_AC_network.state_in[0]: rnn_state[0],
-                               self.local_AC_network.state_in[1]: rnn_state[1]}
-                )
+                a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
+                                     feed_dict={self.local_AC_network.inputs: [s]})
                 # get a action_index from a_dist in self.local_AC.policy
                 a_index = self.choose_action_index(a_dist[0], deterministic=True)
                 # make an action
