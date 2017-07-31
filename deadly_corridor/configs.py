@@ -3,3 +3,4 @@
 img_dim = 80
 a_size = 7
 ACTION_DIM = 54
+RNN_DIM = 256
