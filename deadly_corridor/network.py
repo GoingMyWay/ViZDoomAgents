@@ -15,14 +15,14 @@ class ACNetwork(object):
     """
     Actor-Critic network
     """
-    def __init__(self, scope, optimizer, play=False):
+    def __init__(self, scope, optimizer, play=False, shape=(80, 80)):
         if not isinstance(optimizer, tf.train.Optimizer) and optimizer is not None:
             raise TypeError("Type Error")
-        self.__create_network(scope, optimizer, play=play)
+        self.__create_network(scope, optimizer, play=play, shape=shape)
 
-    def __create_network(self, scope, optimizer, play=False):
+    def __create_network(self, scope, optimizer, play=False, shape=(80, 80)):
         with tf.variable_scope(scope):
-            self.inputs = tf.placeholder(shape=[None, 80, 80, 1], dtype=tf.float32)
+            self.inputs = tf.placeholder(shape=[None, *shape, 1], dtype=tf.float32)
             self.conv_1 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.inputs, num_outputs=32,
                                       kernel_size=[8, 8], stride=4, padding='SAME')
             self.conv_2 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.conv_1, num_outputs=64,
@@ -76,12 +76,21 @@ class ACNetwork(object):
 
                 # Get gradients from local network using local losses
                 local_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope)
-                self.gradients = tf.gradients(self.loss, local_vars)
+                value_var, policy_var = local_vars[:-2] + [local_vars[-1]], local_vars[:-2] + [local_vars[-2]]
                 self.var_norms = tf.global_norm(local_vars)
-                grads, self.grad_norms = tf.clip_by_global_norm(self.gradients, 60.0)
+
+                self.value_gradients = tf.gradients(self.value_loss, value_var)
+                value_grads, self.grad_norms_value = tf.clip_by_global_norm(self.value_gradients, 60)
+
+                self.policy_gradients = tf.gradients(self.policy_loss, policy_var)
+                policy_grads, self.grad_norms_policy = tf.clip_by_global_norm(self.policy_gradients, 60.0)
 
                 # Apply local gradients to global network
                 global_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'global')
-                self.apply_grads = optimizer.apply_gradients(zip(grads, global_vars))
+                global_vars_value, global_vars_policy = \
+                    global_vars[:-2] + [global_vars[-1]], global_vars[:-2] + [global_vars[-2]]
+
+                self.apply_grads_value = optimizer.apply_gradients(zip(value_grads, global_vars_value))
+                self.apply_grads_policy = optimizer.apply_gradients(zip(policy_grads, global_vars_policy))
 
                 # add summary
