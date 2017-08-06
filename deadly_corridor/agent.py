@@ -24,16 +24,15 @@ from vizdoom import *
 
 import utils
 import network
+import configs as cfg
 
 
 class Agent(object):
     """
     Agent
     """
-    def __init__(self, game, name, s_size, a_size, optimizer=None, model_path=None, global_episodes=None, play=False):
-        self.s_size = s_size
-        self.a_size = a_size
-
+    def __init__(self, game, name, optimizer=None, model_path=None, global_episodes=None, play=False, img_shape=(80, 80)):
+        self.img_shape = img_shape
         self.summary_step = 3
 
         self.name = "worker_" + str(name)
@@ -53,11 +52,11 @@ class Agent(object):
             self.trainer = optimizer
             self.global_episodes = global_episodes
             self.increment = self.global_episodes.assign_add(1)
-            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play)
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, shape=self.img_shape)
             self.summary_writer = tf.summary.FileWriter("./summaries/deadly_corridor/agent_%s" % str(self.number))
             self.update_local_ops = tf.group(*utils.update_target_graph('global', self.name))
         else:
-            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play)
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, shape=self.img_shape)
         if not isinstance(game, DoomGame):
             raise TypeError("Type Error")
 
@@ -67,6 +66,7 @@ class Agent(object):
         game.load_config("../scenarios/deadly_corridor.cfg")
         # game.set_doom_map("map01")
         game.set_screen_resolution(ScreenResolution.RES_640X480)
+        # game.set_screen_resolution(ScreenResolution.RES_400X225)
         game.set_screen_format(ScreenFormat.RGB24)
         game.set_render_hud(False)
         game.set_render_crosshair(False)
@@ -125,16 +125,18 @@ class Agent(object):
             self.local_AC_network.state_in[0]: rnn_state[0],
             self.local_AC_network.state_in[1]: rnn_state[1]
         }
-        l, v_l, p_l, e_l, g_n, v_n, _ = sess.run([
+        l, v_l, p_l, e_l, g_n_v, g_n_p, v_n, _, _ = sess.run([
                                             self.local_AC_network.loss,
                                             self.local_AC_network.value_loss,
                                             self.local_AC_network.policy_loss,
                                             self.local_AC_network.entropy,
-                                            self.local_AC_network.grad_norms,
+                                            self.local_AC_network.grad_norms_value,
+                                            self.local_AC_network.grad_norms_policy,
                                             self.local_AC_network.var_norms,
-                                            self.local_AC_network.apply_grads],
+                                            self.local_AC_network.apply_grads_value,
+                                            self.local_AC_network.apply_grads_policy],
                                             feed_dict=feed_dict)
-        return l / len(rollout), v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
+        return l / len(rollout), v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n_v, g_n_p, v_n
 
     def train_a3c(self, max_episode_length, gamma, sess, coord, saver):
         if not isinstance(saver, tf.train.Saver):
@@ -162,7 +164,7 @@ class Agent(object):
                 while not self.env.is_episode_finished():
 
                     s = self.env.get_state().screen_buffer
-                    s = utils.process_frame(s)
+                    s = utils.process_frame(s, self.img_shape)
                     # Take an action using probabilities from policy network output.
                     a_dist, v, rnn_state = sess.run(
                         [self.local_AC_network.policy,
@@ -183,7 +185,7 @@ class Agent(object):
                     health_delta = self.env.get_game_variable(GameVariable.HEALTH) - last_total_health
                     last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
 
-                    health_reward = self.health_reward_function(health_delta, episode_step_count)
+                    health_reward = self.health_reward_function(health_delta)
                     ammo2_reward = self.ammo2_reward_function(ammo2_delta)
 
                     kill_reward, last_total_kills = self.kills_reward_function(last_total_kills)
@@ -196,7 +198,7 @@ class Agent(object):
                         s1 = s
                     else:  # game is not finished
                         s1 = self.env.get_state().screen_buffer
-                        s1 = utils.process_frame(s1)
+                        s1 = utils.process_frame(s1, self.img_shape)
 
                     episode_buffer.append([s, a_index, reward, s1, d, v[0, 0]])
                     episode_values.append(v[0, 0])
@@ -213,7 +215,7 @@ class Agent(object):
                                       feed_dict={self.local_AC_network.inputs: [s],
                                                  self.local_AC_network.state_in[0]: rnn_state[0],
                                                  self.local_AC_network.state_in[1]: rnn_state[1]})[0, 0]
-                        l, v_l, p_l, e_l, g_n, v_n = self.infer(episode_buffer, sess, gamma, v1)
+                        l, v_l, p_l, e_l, g_n_v, g_n_p, v_n = self.infer(episode_buffer, sess, gamma, v1)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
                     if d is True:
@@ -232,7 +234,7 @@ class Agent(object):
 
                 # Update the network using the experience buffer at the end of the episode.
                 if len(episode_buffer) != 0:
-                    l, v_l, p_l, e_l, g_n, v_n = self.infer(episode_buffer, sess, gamma, 0.0)
+                    l, v_l, p_l, e_l, g_n_v, g_n_p, v_n = self.infer(episode_buffer, sess, gamma, 0.0)
 
                 # Periodically save gifs of episodes, model parameters, and summary statistics.
                 if episode_count % 5 == 0 and episode_count != 0:
@@ -257,7 +259,8 @@ class Agent(object):
                     summary.value.add(tag='Losses/Value Loss', simple_value=v_l)
                     summary.value.add(tag='Losses/Policy Loss', simple_value=p_l)
                     summary.value.add(tag='Losses/Entropy', simple_value=e_l)
-                    summary.value.add(tag='Losses/Grad Norm', simple_value=g_n)
+                    summary.value.add(tag='Losses/Grad Norm value', simple_value=g_n_v)
+                    summary.value.add(tag='Losses/Grad Norm policy', simple_value=g_n_p)
                     summary.value.add(tag='Losses/Var Norm', simple_value=v_n)
                     self.summary_writer.add_summary(summary, episode_count)
                     self.summary_writer.flush()
@@ -265,7 +268,7 @@ class Agent(object):
                 if self.name == 'worker_0':
                     sess.run(self.increment)
                 episode_count += 1
-                if episode_count == 120000:  # thread to stop
+                if episode_count == 12000000:  # thread to stop
                     print("Stop training name:{}".format(self.name))
                     coord.request_stop()
 
@@ -277,7 +280,7 @@ class Agent(object):
 
             self.env.new_episode()
             state = self.env.get_state()
-            s = utils.process_frame(state.screen_buffer)
+            s = utils.process_frame(state.screen_buffer, self.img_shape)
             episode_rewards = 0
             last_total_shaping_reward = 0
             step = 0
@@ -286,7 +289,7 @@ class Agent(object):
 
             while not self.env.is_episode_finished():
                 state = self.env.get_state()
-                s = utils.process_frame(state.screen_buffer)
+                s = utils.process_frame(state.screen_buffer, self.img_shape)
                 a_dist, v, rnn_state = sess.run(
                     [self.local_AC_network.policy,
                      self.local_AC_network.value,
@@ -344,16 +347,16 @@ class Agent(object):
         if ammo2_delta == 0:
             return 0
         elif ammo2_delta > 0:
-            return ammo2_delta * 0.5
+            return ammo2_delta * 0.1
         else:
-            return -ammo2_delta * 0.5
+            return -ammo2_delta * 0.1
 
     def kills_reward_function(self, last_total_kills):
         kill_count = self.env.get_game_variable(GameVariable.KILLCOUNT)
         kill_delta = kill_count - last_total_kills
         reward = 0
         if kill_delta > 0:
-            reward = kill_delta * 2.5
+            reward = kill_delta * 30.
         return reward, kill_count
 
     @staticmethod
