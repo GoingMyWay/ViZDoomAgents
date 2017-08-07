@@ -5,20 +5,6 @@ import numpy as np
 import tensorflow as tf
 import scipy.signal as signal
 
-import matplotlib
-gui_env = [i for i in matplotlib.rcsetup.interactive_bk]
-for gui in gui_env:
-    print("testing", gui)
-    try:
-        matplotlib.use(gui, warn=False, force=True)
-        from matplotlib import pyplot as plt
-        print("Using ..... ", matplotlib.get_backend())
-    except:
-        print("    ", gui, "Not found")
-
-
-
-import vizdoom
 from vizdoom import *
 
 
@@ -37,13 +23,12 @@ def discount(x, gamma):
     return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
 
-# Processes Doom screen image to produce cropped and resized image.
-def process_frame(frame, img_dim):
-    img = cv2.resize(frame, img_dim, interpolation=cv2.INTER_LINEAR)
-    img = rgb2gray(img, img_dim)
+def process_frame(frame, shape=(80, 80)):
+    img = cv2.resize(frame, shape, interpolation=cv2.INTER_LINEAR)
+    img = rgb2gray(img, shape)
     return img
 
 
 def rgb2gray(rgb, img_dim):
     gray = np.dot(rgb[..., :3], [0.299, 0.587, 0.114])
-    return gray.reshape((img_dim, img_dim, 1))
+    return gray.reshape(*img_dim)

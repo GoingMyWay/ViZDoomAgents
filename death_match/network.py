@@ -22,41 +22,27 @@ class ACNetwork(object):
 
     def __create_network(self, scope, optimizer, play=False, shape=(80, 80)):
         with tf.variable_scope(scope):
-            self.inputs = tf.placeholder(shape=[None, *shape, 1], dtype=tf.float32)
-            self.conv_1 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.inputs, num_outputs=32,
-                                      kernel_size=[8, 8], stride=4, padding='SAME')
-            self.conv_2 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.conv_1, num_outputs=64,
-                                      kernel_size=[4, 4], stride=2, padding='SAME')
-            self.conv_3 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.conv_2, num_outputs=64,
+            self.inputs = tf.placeholder(shape=[None, *shape, 4], dtype=tf.float32)
+            self.conv_1 = slim.conv2d(inputs=self.inputs, activation_fn=tf.nn.relu, num_outputs=32,
+                                      kernel_size=[7, 7], stride=2, padding='SAME')
+            self.conv_2 = slim.conv2d(inputs=self.conv_1, activation_fn=tf.nn.relu, num_outputs=64,
+                                      kernel_size=[7, 7], stride=2, padding='SAME')
+            self.mp_1 = slim.max_pool2d(inputs=self.conv_2, kernel_size=[3, 3], stride=2, padding='VALID')
+            self.conv_3 = slim.conv2d(inputs=self.mp_1, activation_fn=tf.nn.relu, num_outputs=128,
                                       kernel_size=[3, 3], stride=1, padding='SAME')
-            self.fc = slim.fully_connected(slim.flatten(self.conv_3), 512, activation_fn=tf.nn.elu)
-
-            # LSTM
-            lstm_cell = tf.contrib.rnn.BasicLSTMCell(cfg.RNN_DIM, state_is_tuple=True)
-            c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
-            h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
-            self.state_init = [c_init, h_init]
-            c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
-            h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-            self.state_in = (c_in, h_in)
-            rnn_in = tf.expand_dims(self.fc, [0])
-            step_size = tf.shape(self.inputs)[:1]
-            state_in = tf.contrib.rnn.LSTMStateTuple(c_in, h_in)
-            lstm_outputs, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
-                                                         rnn_in,
-                                                         initial_state=state_in,
-                                                         sequence_length=step_size,
-                                                         time_major=False)
-            lstm_c, lstm_h = lstm_state
-            self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
-            rnn_out = tf.reshape(lstm_outputs, [-1, 256])
+            self.mp_2 = slim.max_pool2d(inputs=self.conv_3, kernel_size=[3, 3], stride=2, padding='SAME')
+            self.conv_4 = slim.conv2d(inputs=self.mp_2, activation_fn=tf.nn.relu, num_outputs=192,
+                                      kernel_size=[3, 3], stride=1, padding='VALID')
+            self.fc = slim.fully_connected(slim.flatten(self.conv_4), 1024, activation_fn=tf.nn.elu)
+            self.game_variables = tf.placeholder(shape=[None, 6], dtype=tf.float32)  # game variables Health AMMO2-6
+            self.new_fc = tf.concat([self.fc, self.game_variables], axis=1)
 
             # Output layers for policy and value estimations
-            self.policy = slim.fully_connected(rnn_out,
+            self.policy = slim.fully_connected(self.new_fc,
                                                cfg.ACTION_DIM,
                                                activation_fn=tf.nn.softmax,
                                                biases_initializer=None)
-            self.value = slim.fully_connected(rnn_out,
+            self.value = slim.fully_connected(self.new_fc,
                                               1,
                                               activation_fn=None,
                                               biases_initializer=None)
@@ -66,12 +52,13 @@ class ACNetwork(object):
                 self.target_v = tf.placeholder(shape=[None], dtype=tf.float32)
                 self.advantages = tf.placeholder(shape=[None], dtype=tf.float32)
 
-                self.responsible_outputs = tf.reduce_sum(self.policy * self.actions_onehot, axis=1)
+                self.v_outputs = tf.reduce_sum(self.policy * self.actions_onehot, axis=1)
 
                 # Loss functions
-                self.policy_loss = -tf.reduce_sum(self.advantages * tf.log(self.responsible_outputs+1e-10))
-                self.value_loss = tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
                 self.entropy = -tf.reduce_sum(self.policy * tf.log(self.policy+1e-10))
+                self.policy_loss = -tf.reduce_sum(self.advantages * tf.log(self.v_outputs+1e-10)) - 0.005 * self.entropy
+                self.value_loss = tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
+                self.loss = self.policy_loss + 0.5 * self.value_loss - 0.005 * self.entropy
 
                 # Get gradients from local network using local losses
                 local_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope)
@@ -79,10 +66,10 @@ class ACNetwork(object):
                 self.var_norms = tf.global_norm(local_vars)
 
                 self.value_gradients = tf.gradients(self.value_loss, value_var)
-                value_grads, self.grad_norms_value = tf.clip_by_global_norm(self.value_gradients, 60)
+                value_grads, self.grad_norms_value = tf.clip_by_global_norm(self.value_gradients, 40.0)
 
                 self.policy_gradients = tf.gradients(self.policy_loss, policy_var)
-                policy_grads, self.grad_norms_policy = tf.clip_by_global_norm(self.policy_gradients, 60.0)
+                policy_grads, self.grad_norms_policy = tf.clip_by_global_norm(self.policy_gradients, 40.0)
 
                 # Apply local gradients to global network
                 global_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'global')
