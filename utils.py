@@ -39,7 +39,7 @@ def discount(x, gamma):
 
 # Processes Doom screen image to produce cropped and resized image.
 def process_frame(frame, img_dim):
-    img = cv2.resize(frame, img_dim, interpolation=cv2.INTER_LINEAR)
+    img = cv2.resize(frame, *img_dim, interpolation=cv2.INTER_LINEAR)
     img = rgb2gray(img, img_dim)
     return img
 
