@@ -34,6 +34,7 @@ class Agent(object):
         self.last_total_health = 100.
         self.last_total_kills = 0
         self.last_total_reward = 0
+        self.last_position_xyz = [0, 0, 0]
 
         # Create the local copy of the network and the tensorflow op to
         # copy global parameters to local network
@@ -140,6 +141,7 @@ class Agent(object):
                 terminate = False
 
                 self.env.new_episode()
+                self.last_position_xyz = self.get_position_xyz()
                 st_s = utils.process_frame(self.env.get_state().screen_buffer, self.img_shape)
                 s = np.stack((st_s, st_s, st_s, st_s), axis=2)
                 episode_st = time.time()
@@ -154,8 +156,8 @@ class Agent(object):
                     # get a action_index from a_dist in self.local_AC.policy
                     a_index = self.choose_action_index(a_dist[0], deterministic=False)
                     # make an action
-                    self.env.make_action(self.actions[a_index], 4) / 4.0
-                    reward = self.reward_function_2()
+                    self.env.make_action(self.actions[a_index], cfg.SKIP_FRAME_NUM) / float(cfg.SKIP_FRAME_NUM)
+                    reward = self.reward_function()
                     episode_reward += reward
 
                     terminate = self.env.is_episode_finished()
@@ -272,7 +274,8 @@ class Agent(object):
                 last_total_shaping_reward += r
 
                 episode_rewards += reward
-
+                print('Current weapon: {}, type: {}'.format(self.env.get_game_variable(GameVariable.SELECTED_WEAPON),
+                                                            type(self.env.get_game_variable(GameVariable.SELECTED_WEAPON))))
                 print('Current step: #{}'.format(step))
                 print('Current action: ', self.actions[a_index])
                 print('Current health: ', self.env.get_game_variable(GameVariable.HEALTH))
@@ -306,7 +309,7 @@ class Agent(object):
             self.env.get_game_variable(GameVariable.AMMO6)
         ], dtype=np.float32)
 
-    def __kills_reward_function(self):
+    def __kills_reward(self):
         kill_count = self.env.get_game_variable(GameVariable.KILLCOUNT)
         kill_delta = kill_count - self.last_total_kills
         reward = 0
@@ -314,35 +317,60 @@ class Agent(object):
             reward = kill_delta
         return reward, kill_count
 
-    def weapon_reward_function(self):
-        pass
+    def __weapon_reward(self):
+        current_weapon = self.env.get_game_variable(GameVariable.SELECTED_WEAPON)
+        if current_weapon == 1.0:
+            return -1
+        elif current_weapon == 2.0:
+            return -0.01
+        elif current_weapon == 3.0:
+            return .5
+        elif current_weapon == 4.0:
+            return .5
+        elif current_weapon == 5.0:
+            return 1.
+        elif current_weapon == 6.0:
+            return 1.5
 
     def reward_function(self):
         # living reward
         living_reward = self.__penalize_living()
         # kill reward
-        kill_reward, self.last_total_kills = self.__kills_reward_function()
+        kill_reward, self.last_total_kills = self.__kills_reward()
         # ammo2 reward
-        ammo2_reward = self.__ammo_reward_function()
+        ammo2_reward = self.__ammo_reward()
         # health reward
-        health_reward = self.__health_reward_function()
-        # TODO: Weapon reward
-        # reward
-        reward = living_reward + kill_reward + health_reward + ammo2_reward
+        health_reward = self.__health_reward()
+        # weapon reward
+        weapon_reward = self.__weapon_reward()
+        # distance reward
+        distance_reward = self.__distance_reward()
+        reward = living_reward + kill_reward + health_reward + ammo2_reward + distance_reward + weapon_reward
         return reward
 
     def reward_function_2(self):
         reward = self.env.get_total_reward() - self.last_total_reward
+        dist_reward = self.__distance_reward()
+        weapon_reward = self.__weapon_reward()
         self.last_total_reward = self.env.get_total_reward()
         self.last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
         self.last_total_kills = self.env.get_game_variable(GameVariable.KILLCOUNT)
-        return reward
+        return reward + dist_reward + weapon_reward
+
+    def __distance_reward(self):
+        current_position = self.get_position_xyz()
+        dist = np.sqrt(sum([(v1-v2)**2 for v1, v2 in zip(current_position, self.last_position_xyz)]))
+        self.last_position_xyz = self.get_position_xyz()
+        if dist <= cfg.STAY_PENALIZE_THRESHOLD_VALUE:
+            return -0.03  # -0.03 * cfg.SKIP_FRAME_NUM
+        else:
+            return 9e-5 * dist
 
     @staticmethod
     def __penalize_living():
         return -0.008
 
-    def __health_reward_function(self):
+    def __health_reward(self):
         health_delta = self.env.get_game_variable(GameVariable.HEALTH) - self.last_total_health
         self.last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
         if health_delta < 0:
@@ -350,7 +378,7 @@ class Agent(object):
         else:
             return 0.04 * health_delta
 
-    def __ammo_reward_function(self):
+    def __ammo_reward(self):
         ammo_delta = self.env.get_game_variable(GameVariable.SELECTED_WEAPON_AMMO) - \
             self.last_weapon_ammo_dict[int(self.env.get_game_variable(GameVariable.SELECTED_WEAPON))]
         self.last_weapon_ammo_dict[int(self.env.get_game_variable(GameVariable.SELECTED_WEAPON))] = \
@@ -360,3 +388,10 @@ class Agent(object):
             return 0.15 * ammo_delta
         elif ammo_delta < 0:
             return -0.04 * ammo_delta
+
+    def get_position_xyz(self):
+        return [
+            self.env.get_game_variable(GameVariable.POSITION_X),
+            self.env.get_game_variable(GameVariable.POSITION_Y),
+            self.env.get_game_variable(GameVariable.POSITION_Z)
+        ]
