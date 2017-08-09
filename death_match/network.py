@@ -37,6 +37,17 @@ class ACNetwork(object):
             self.game_variables = tf.placeholder(shape=[None, 6], dtype=tf.float32)  # game variables Health AMMO2-6
             self.new_fc = tf.concat([self.fc, self.game_variables], axis=1)
 
+            # self.inputs = tf.placeholder(shape=[None, *shape, 4], dtype=tf.float32)
+            # self.conv_1 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.inputs, num_outputs=32,
+            #                           kernel_size=[8, 8], stride=4, padding='SAME')
+            # self.conv_2 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.conv_1, num_outputs=64,
+            #                           kernel_size=[4, 4], stride=2, padding='SAME')
+            # self.conv_3 = slim.conv2d(activation_fn=tf.nn.relu, inputs=self.conv_2, num_outputs=64,
+            #                           kernel_size=[3, 3], stride=1, padding='SAME')
+            # self.fc = slim.fully_connected(slim.flatten(self.conv_3), 1024, activation_fn=tf.nn.elu)
+            # self.game_variables = tf.placeholder(shape=[None, 6], dtype=tf.float32)  # game variables Health AMMO2-6
+            # self.new_fc = tf.concat([self.fc, self.game_variables], axis=1)
+
             # Output layers for policy and value estimations
             self.policy = slim.fully_connected(self.new_fc,
                                                cfg.ACTION_DIM,
@@ -56,7 +67,7 @@ class ACNetwork(object):
 
                 # Loss functions
                 self.entropy = -tf.reduce_sum(self.policy * tf.log(self.policy+1e-10))
-                self.policy_loss = -tf.reduce_sum(self.advantages * tf.log(self.v_outputs+1e-10)) - 0.005 * self.entropy
+                self.policy_loss = -tf.reduce_sum(self.advantages * tf.log(self.v_outputs+1e-10))
                 self.value_loss = tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
                 self.loss = self.policy_loss + 0.5 * self.value_loss - 0.005 * self.entropy
 
