@@ -23,3 +23,6 @@ RNN_DIM = 256
 new_img_shape = (120, 120)
 BUFFER_SIZE = 64
 ACTION_DIM = len(button_combinations())
+
+STAY_PENALIZE_THRESHOLD_VALUE = 0.0001
+SKIP_FRAME_NUM = 4
