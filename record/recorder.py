@@ -81,6 +81,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
         print('Error occurred, exit')
-        game.close()
     finally:
         game.close()
