@@ -44,6 +44,17 @@ class Recorder(object):
 
                 buffer.append([s, last_action, last_reward, s1, d, *game_variables])
 
+                print("State #" + str(state.number))
+                print("Game variables: ", state.game_variables)
+                print("Action:", last_action)
+                print("Reward:", last_reward)
+                print("Total reward:", self.game.get_total_reward())
+                print("=====================")
+
+            print("Episode finished!")
+            print("Total reward:", self.game.get_total_reward())
+            print("************************")
+
             self.record_buffer[i] = buffer
 
         with open('record.pickle', 'wb') as f:
@@ -75,7 +86,7 @@ def rgb2gray(rgb, img_shape):
 
 if __name__ == '__main__':
     game = ViZDoomGame(scenario_path='../../scenarios/D3_battle.cfg')
-    recorder = Recorder(episode_num=5, game=game)
+    recorder = Recorder(episode_num=1, game=game)
     try:
         recorder.play()
     except Exception as e:
