@@ -51,7 +51,7 @@ class Recorder(object):
                 print("Total reward:", self.game.get_total_reward())
                 print("=====================")
 
-            print("Episode finished!")
+            print("Episode #%s finished!" % i)
             print("Total reward:", self.game.get_total_reward())
             print("************************")
 
