@@ -2,13 +2,15 @@
 
 IMG_SHAPE = (80, 80)
 a_size = 3
-model_path = './check_point/supreme/'
-model_file = 'model-3750.ckpt'
+model_path = './check_point/D3_battle/'
+model_file = 'model-51000.ckpt'
+model_file = 'model-8700.ckpt'
+model_file = 'model-30150.ckpt'
 
 SCENARIO_PATH = '../scenarios/D3_battle.cfg'
 
 IS_SUPREME_VERSION = True
-IS_TRAIN = True
+IS_TRAIN = False
 AGENTS_NUM = 16
 
 HIST_LEN = 4
@@ -32,3 +34,6 @@ def button_combinations():
 
 ACTION_DIM = len(button_combinations())
 SKIP_FRAME_NUM = 4
+
+AGENT_PREFIX = 'Agent_'
+AGENT_MONITOR = AGENT_PREFIX + '0'
