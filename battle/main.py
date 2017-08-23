@@ -35,7 +35,7 @@ def main_train(tf_configs=None):
         agents = []
         # Create worker classes
         for i in range(num_workers):
-            agents.append(agent.Agent(DoomGame(), i, optimizer, cfg.model_path, global_episodes))
+            agents.append(agent.Agent(DoomGame(), i, optimizer, cfg.model_path, global_episodes, task_name='D3_battle'))
     saver = tf.train.Saver(max_to_keep=100)
 
     with tf.Session(config=tf_configs) as sess:
@@ -71,7 +71,8 @@ def main_play(tf_configs=None):
         saver = tf.train.Saver()
         ckpt = tf.train.get_checkpoint_state(cfg.model_path)
         saver.restore(sess, os.path.join(cfg.model_path, cfg.model_file))
-        print('Successfully loaded!')
+        print('Successfully loaded the model, now time to play the game...')
+        time.sleep(3)
 
         ag.play_game(sess, 10)
 
