@@ -22,10 +22,12 @@ class Agent(object):
     def __init__(self, game, name, optimizer=None, model_path=None,
                  global_episodes=None, play=False, task_name='healthpack_simple'):
         self.task_name = task_name
-
+        self.play = play
         self.summary_step = 3
 
-        self.name = "ag_" + str(name)
+        self.visualizer = utils.Visualiser()
+
+        self.name = cfg.AGENT_PREFIX + str(name)
         self.number = name
 
         self.last_total_health = 100.
@@ -39,22 +41,20 @@ class Agent(object):
         self.episode_health = []
         self.episode_kills = []
 
-        # Create the local copy of the network and the tensorflow op to
-        # copy global parameters to local network
-        if not play:
+        if not self.play:
             self.model_path = model_path
             self.trainer = optimizer
             self.global_episodes = global_episodes
             self.increment = self.global_episodes.assign_add(1)
-            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, img_shape=cfg.IMG_SHAPE)
-            self.summary_writer = tf.summary.FileWriter("./summaries/healthpack/train_health%s" % str(self.number))
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=self.play, img_shape=cfg.IMG_SHAPE)
+            self.summary_writer = tf.summary.FileWriter("./summaries/%s/ag_%s" % (self.task_name, str(self.number)))
+            # create a tensorflow op to copy weights from global network regularly when training
             self.update_local_ops = tf.group(*utils.update_target_graph('global', self.name))
         else:
-            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, img_shape=cfg.IMG_SHAPE)
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=self.play, img_shape=cfg.IMG_SHAPE)
         if not isinstance(game, DoomGame):
             raise TypeError("Type Error")
 
-        # The Below code is related to setting up the Doom environment
         game = DoomGame()
         game.load_config(cfg.SCENARIO_PATH)
         game.set_doom_map("map01")
@@ -79,11 +79,11 @@ class Agent(object):
         game.add_available_game_variable(GameVariable.USER2)
         game.set_episode_timeout(2100)
         game.set_episode_start_time(5)
-        game.set_window_visible(play)
+        game.set_window_visible(self.play)
         game.set_sound_enabled(False)
         game.set_living_reward(0)
         game.set_mode(Mode.PLAYER)
-        if play:
+        if self.play:
             game.add_game_args("+viz_render_all 1")
             game.set_render_hud(False)
             game.set_ticrate(35)
@@ -132,7 +132,7 @@ class Agent(object):
 
         episode_count = sess.run(self.global_episodes)
         start_t = time.time()
-        print("Starting worker " + str(self.number))
+        print("Starting  %s%s" % (cfg.AGENT_PREFIX, str(self.number)))
         self.last_total_ammos = self.env.get_game_variable(GameVariable.AMMO2)
 
         with sess.as_default(), sess.graph.as_default():
@@ -142,7 +142,7 @@ class Agent(object):
                 episode_values = []
                 episode_reward = 0
                 episode_step_count = 0
-                d = False
+                end = False
 
                 self.env.new_episode()
                 st_s = utils.process_frame(self.env.get_state().screen_buffer, self.img_shape)
@@ -151,28 +151,20 @@ class Agent(object):
 
                 while not self.env.is_episode_finished():
                     game_vars = self.env.get_state().game_variables[:-1]
-                    # Take an action using probabilities from policy network output.
-                    a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value], feed_dict={
-                                self.local_AC_network.inputs: [s],
-                                self.local_AC_network.game_variables: [game_vars]
-                    })
-                    # get a action_index from a_dist in self.local_AC.policy
-                    a_index = self.choose_action_index(a_dist[0], deterministic=False)
-                    # make an action
-                    self.env.make_action(self.actions[a_index], cfg.SKIP_FRAME_NUM)
+                    state = [s, game_vars]
 
-                    reward = self.reward_function()
+                    reward, v, end, a_index = self.step(state, sess)
+
                     episode_reward += reward
 
-                    d = self.env.is_episode_finished()
-                    if d:
+                    if end:
                         s1 = s
                     else:  # game is not finished
                         img = np.reshape(utils.process_frame(
                             self.env.get_state().screen_buffer, self.img_shape), (*self.img_shape, 1))
                         s1 = np.append(img, s[:, :, :3], axis=2)
 
-                    episode_buffer.append([s, a_index, reward, s1, d, v[0, 0], game_vars])
+                    episode_buffer.append([s, a_index, reward, s1, end, v[0, 0], game_vars])
                     episode_values.append(v[0, 0])
                     # summaries information
                     s = s1
@@ -180,7 +172,7 @@ class Agent(object):
 
                     # If the episode hasn't ended, but the experience buffer is full, then we
                     # make an update step using that experience rollout.
-                    if len(episode_buffer) == 64 and d is False and episode_step_count != max_episode_length - 1:
+                    if len(episode_buffer) == 64 and end is False and episode_step_count != max_episode_length - 1:
                         # Since we don't know what the true final return is,
                         # we "bootstrap" from our current value estimation.
                         v1 = sess.run(self.local_AC_network.value, feed_dict={
@@ -191,10 +183,10 @@ class Agent(object):
                         episode_buffer = []
                         sess.run(self.update_local_ops)
 
-                    if d is True:
+                    if end is True:
                         self.episode_health.append(self.env.get_game_variable(GameVariable.HEALTH))
                         self.episode_kills.append(self.env.get_game_variable(GameVariable.USER2))
-                        print('{}, Health: {}, Kills: {}, episode #{}, reward: {}, steps:{}, time costs:{}'.format(
+                        print('{}, health: {}, kills: {}, episode #{}, reward: {}, steps:{}, time costs:{}'.format(
                             self.name, self.env.get_game_variable(GameVariable.HEALTH),
                             self.env.get_game_variable(GameVariable.USER2), episode_count,
                             episode_reward, episode_step_count, time.time()-episode_st))
@@ -211,7 +203,7 @@ class Agent(object):
 
                 # Periodically save gifs of episodes, model parameters, and summary statistics.
                 if episode_count % 5 == 0 and episode_count != 0:
-                    if episode_count % 50 == 0 and self.name == 'worker_0':
+                    if episode_count % 50 == 0 and self.name == cfg.AGENT_MONITOR:
                         saver.save(sess, self.model_path+'/model-'+str(episode_count)+'.ckpt')
                         print("Episode count {}, saved Model, time costs {}".format(episode_count, time.time()-start_t))
                         start_t = time.time()
@@ -236,7 +228,7 @@ class Agent(object):
                     self.summary_writer.add_summary(summary, episode_count)
                     self.summary_writer.flush()
 
-                if self.name == 'worker_0':
+                if self.name == cfg.AGENT_MONITOR:
                     sess.run(self.increment)
                 episode_count += 1
                 if episode_count == 120000:  # thread to stop
@@ -247,49 +239,63 @@ class Agent(object):
         if not isinstance(sess, tf.Session):
             raise TypeError('saver should be tf.train.Saver')
 
+        self.visualizer.init()
+
         for i in range(episode_num):
 
             self.env.new_episode()
-            state = self.env.get_state()
+
             st_s = utils.process_frame(self.env.get_state().screen_buffer, self.img_shape)
             s = np.stack((st_s, st_s, st_s, st_s), axis=2)
             episode_rewards = 0
-            last_total_shaping_reward = 0
             step = 0
             s_t = time.time()
-            while not self.env.is_episode_finished():
-                a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value], feed_dict={
-                    self.local_AC_network.inputs: [s],
-                    self.local_AC_network.game_variables: [self.env.get_state().game_variables[:-1]],
-                })
-                # get a action_index from a_dist in self.local_AC.policy
-                a_index = self.choose_action_index(a_dist[0], deterministic=True)
-                # make an action
-                self.env.make_action(self.actions[a_index])
 
-                if self.env.is_episode_finished():
+            while not self.env.is_episode_finished():
+                game_vars = self.env.get_state().game_variables
+                state = [s, game_vars[:-1]]
+
+                reward, v, end, a_index = self.step(state, sess)
+                self.visualizer.visualize(s, game_vars, self.actions[a_index], reward, v)
+                if end:
                     break
 
-                img = utils.process_frame(self.env.get_state().screen_buffer, self.img_shape)
-                img = np.reshape(img, (*self.img_shape, 1))
+                img = np.reshape(
+                    utils.process_frame(self.env.get_state().screen_buffer, self.img_shape), (*self.img_shape, 1))
                 s = np.append(img, s[:, :, :3], axis=2)
 
                 step += 1
 
-                shaping_reward = doom_fixed_to_double(self.env.get_game_variable(GameVariable.USER1)) / 100.
-                r = (shaping_reward - last_total_shaping_reward)
-                last_total_shaping_reward += r
-
-                episode_rewards += r
+                episode_rewards += reward
 
                 print('Current step: #{}'.format(step))
                 print('Current action: ', self.actions[a_index])
-                print('Current health: ', self.env.get_game_variable(GameVariable.HEALTH))
-                print('Current shaping: {0}'.format(shaping_reward))
-                print('Current reward: {0}'.format(r))
-            print('End episode: {}, Total Reward: {}, {}'.format(i, episode_rewards, last_total_shaping_reward))
+                print('Current game variables: ', self.env.get_state().game_variables)
+                print('Current reward: {0}'.format(reward))
+                time.sleep(0.05)
+            print('End episode: {}, Total Reward: {}'.format(i, episode_rewards))
             print('time costs: {}'.format(time.time() - s_t))
             time.sleep(5)
+
+    def step(self, state, sess):
+        if not isinstance(sess, tf.Session):
+            raise TypeError('TypeError')
+
+        s, game_vars = state
+        a_dist, value = sess.run([self.local_AC_network.policy, self.local_AC_network.value], feed_dict={
+            self.local_AC_network.inputs: [s],
+            self.local_AC_network.game_variables: [game_vars]
+        })
+        a_index = self.choose_action_index(a_dist[0], deterministic=False)
+        if self.play:
+            self.env.make_action(self.actions[a_index])
+        else:
+            self.env.make_action(self.actions[a_index], cfg.SKIP_FRAME_NUM)
+
+        reward = self.reward_function()
+        end = self.env.is_episode_finished()
+
+        return reward, value, end, a_index
 
     @staticmethod
     def choose_action_index(policy, deterministic=False):
@@ -307,25 +313,48 @@ class Agent(object):
 
     def reward_function(self):
         kills_delta = self.env.get_game_variable(GameVariable.USER2) - self.last_total_kills
-        self.last_total_kills = self.env.get_game_variable(GameVariable.USER2)
-
         ammo_delta = self.env.get_game_variable(GameVariable.AMMO2) - self.last_total_ammos
-        self.last_total_ammos = self.env.get_game_variable(GameVariable.AMMO2)
-
         health_delta = self.env.get_game_variable(GameVariable.HEALTH) - self.last_total_health
-        self.last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
 
         reward = 0
-        reward += kills_delta
+        reward += kills_delta * 20
 
-        if ammo_delta >= 0:
-            reward += ammo_delta * 0.05
-        else:
-            reward += ammo_delta * 0.01
+        # health issues
+        if self.last_total_health < 50:  # dangerous situation
+            if health_delta > 0:
+                reward += health_delta * 1.    # large reward
+            else:
+                reward -= health_delta * .5    # large penalty
 
-        if health_delta >= 0:
-            reward += health_delta * 0.05
-        else:
-            reward += health_delta * 0.1  # to large
+        elif self.last_total_health <= 100:  # moderate situation
+            if health_delta > 0:
+                reward += health_delta * .5    # moderate reward
+            else:
+                reward -= health_delta * .1    # moderate penalty
+
+        else:                               # normal situation
+            if health_delta < 0:
+                reward -= health_delta * .1    # moderate penalty
+
+        # ammo issues
+        if self.last_total_ammos < 10:   # dangerous situation
+            if ammo_delta > 0:
+                reward += ammo_delta * 2.
+            else:
+                reward -= ammo_delta * 1.
+        elif self.last_total_ammos <= 20:  # moderate situation
+            if ammo_delta > 0:
+                reward += ammo_delta * 1.
+            # else:
+            #     reward -= ammo_delta * 0.1
+        else:                             # the more the better
+            if ammo_delta > 0:
+                reward += ammo_delta * .5
+            # else:
+            #     reward -= ammo_delta * 0.05
+
+        self.last_total_kills = self.env.get_game_variable(GameVariable.USER2)
+        self.last_total_ammos = self.env.get_game_variable(GameVariable.AMMO2)
+        self.last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
 
         return reward
