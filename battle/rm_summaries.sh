@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-cd summaries/battle
+cd summaries/D3_battle
 rm -rf  ag_*
 cd -
