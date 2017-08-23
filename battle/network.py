@@ -15,8 +15,6 @@ class ACNetwork(object):
     Actor-Critic network
     """
     def __init__(self, scope, optimizer, play=False, img_shape=(80, 80)):
-        if not isinstance(optimizer, tf.train.Optimizer) and optimizer is not None:
-            raise TypeError("Type Error")
         self.img_shape = img_shape
         self.__create_network(scope, optimizer, play=play)
 
@@ -53,13 +51,13 @@ class ACNetwork(object):
                 self.policy_loss = -tf.reduce_sum(self.advantages * tf.log(self.responsible_outputs+1e-10))
                 self.value_loss = tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
                 self.entropy = -tf.reduce_sum(self.policy * tf.log(self.policy+1e-10))
-                self.loss = self.policy_loss + 0.5 * self.value_loss - 0.01 * self.entropy
+                self.loss = self.policy_loss + 0.5 * self.value_loss - 0.1 * self.entropy
 
                 # Get gradients from local network using local losses
                 local_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope)
                 self.gradients = tf.gradients(self.loss, local_vars)
                 self.var_norms = tf.global_norm(local_vars)
-                grads, self.grad_norms = tf.clip_by_global_norm(self.gradients, 60.0)
+                grads, self.grad_norms = tf.clip_by_global_norm(self.gradients, 40.0)
 
                 # Apply local gradients to global network
                 global_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'global')
