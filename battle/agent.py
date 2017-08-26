@@ -249,6 +249,10 @@ class Agent(object):
             s = np.stack((st_s, st_s, st_s, st_s), axis=2)
             episode_rewards = 0
             step = 0
+
+            reward_list = []
+            value_list = []
+
             s_t = time.time()
 
             while not self.env.is_episode_finished():
@@ -256,7 +260,12 @@ class Agent(object):
                 state = [s, game_vars[:-1]]
 
                 reward, v, end, a_index = self.step(state, sess)
-                self.visualizer.visualize(s, game_vars, self.actions[a_index], reward, v)
+
+                if step >= cfg.SKIP_FRAME_NUM:
+                    reward_list.append(reward)
+                    value_list.append(v[0, 0])
+                    self.visualizer.visualize(s, game_vars, self.actions[a_index], reward_list, value_list)
+
                 if end:
                     break
 
@@ -313,48 +322,31 @@ class Agent(object):
 
     def reward_function(self):
         kills_delta = self.env.get_game_variable(GameVariable.USER2) - self.last_total_kills
+        self.last_total_kills = self.env.get_game_variable(GameVariable.USER2)
+
         ammo_delta = self.env.get_game_variable(GameVariable.AMMO2) - self.last_total_ammos
+        self.last_total_ammos = self.env.get_game_variable(GameVariable.AMMO2)
+
         health_delta = self.env.get_game_variable(GameVariable.HEALTH) - self.last_total_health
+        self.last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
 
         reward = 0
-        reward += kills_delta * 20
+        reward += kills_delta * 20.
 
-        # health issues
-        if self.last_total_health < 50:  # dangerous situation
-            if health_delta > 0:
-                reward += health_delta * 1.    # large reward
-            else:
-                reward -= health_delta * .5    # large penalty
+        if ammo_delta >= 0:
+            reward += ammo_delta * 0.5
+        # else:
+        #     reward += ammo_delta * 0.1
 
-        elif self.last_total_health <= 100:  # moderate situation
-            if health_delta > 0:
-                reward += health_delta * .5    # moderate reward
-            else:
-                reward -= health_delta * .1    # moderate penalty
+        if health_delta >= 0:
+            reward += health_delta * 0.5
+        else:
+            reward += health_delta * 0.1
 
-        else:                               # normal situation
-            if health_delta < 0:
-                reward -= health_delta * .1    # moderate penalty
+        if self.env.get_game_variable(GameVariable.HEALTH) <= 30:
+            reward += -1
 
-        # ammo issues
-        if self.last_total_ammos < 10:   # dangerous situation
-            if ammo_delta > 0:
-                reward += ammo_delta * 2.
-            else:
-                reward -= ammo_delta * 1.
-        elif self.last_total_ammos <= 20:  # moderate situation
-            if ammo_delta > 0:
-                reward += ammo_delta * 1.
-            # else:
-            #     reward -= ammo_delta * 0.1
-        else:                             # the more the better
-            if ammo_delta > 0:
-                reward += ammo_delta * .5
-            # else:
-            #     reward -= ammo_delta * 0.05
-
-        self.last_total_kills = self.env.get_game_variable(GameVariable.USER2)
-        self.last_total_ammos = self.env.get_game_variable(GameVariable.AMMO2)
-        self.last_total_health = self.env.get_game_variable(GameVariable.HEALTH)
+        if self.env.get_game_variable(GameVariable.AMMO2) <= 5:
+            reward += -1
 
         return reward
