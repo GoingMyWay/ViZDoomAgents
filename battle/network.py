@@ -64,3 +64,7 @@ class ACNetwork(object):
                 self.apply_grads = optimizer.apply_gradients(zip(grads, global_vars))
 
                 # add summary
+
+    def update_entropy_rate(self, global_step):
+        if global_step % cfg.decay_steps == 0:
+            self._entropy_rate = cfg.starter_entropy_rate * cfg.decay_rate ** (global_step / cfg.decay_steps)
