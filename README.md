@@ -49,3 +49,11 @@ To get started, you can run the code of the code of healthpack gathering scenari
 If you have any problem, please open an issue!
 
 The code of A3C framework was modified from [awjuliani's repo](https://github.com/awjuliani/DeepRL-Agents/blob/master/A3C-Doom.ipynb).
+
+#### Some suggestions for developers
+
+* Try `setsid` command to run the program in background, for example
+
+    $ setsid python3 main.py
+    
+* If you want to kill a running job on the server, use `pkill -TERM -P THE_PID` to kill all its children processes in stead of `kill -9 THE_PID`.
