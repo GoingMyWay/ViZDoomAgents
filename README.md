@@ -60,3 +60,12 @@ The code of A3C framework was modified from [awjuliani's repo](https://github.co
     setsid python3 main.py > train.log 2>&1
     
 * If you want to kill a running job on the server, use `pkill -TERM -P THE_PID` to kill all its children processes in stead of `kill -9 THE_PID`.
+
+
+#### Some helpful links
+
+* [tensorflow-how-can-i-restore-model-when-some-new-layers-are-added](https://stackoverflow.com/questions/45487323/tensorflow-how-can-i-restore-model-when-some-new-layers-are-added)
+* [tensorflow-why-there-are-3-files-after-saving-the-model](https://stackoverflow.com/questions/41265035/tensorflow-why-there-are-3-files-after-saving-the-model)
+* [python3-importerror-no-module-named-tkinter-on-ubuntu](https://stackoverflow.com/questions/44237302/python3-importerror-no-module-named-tkinter-on-ubuntu)
+* [after-building-tensorflow-from-source-seeing-libcudart-so-and-libcudnn-errors](https://stackoverflow.com/questions/42013316/after-building-tensorflow-from-source-seeing-libcudart-so-and-libcudnn-errors/44147506#44147506)
+* [TensorFlow](https://www.tensorflow.org)
