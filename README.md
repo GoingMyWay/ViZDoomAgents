@@ -54,6 +54,6 @@ The code of A3C framework was modified from [awjuliani's repo](https://github.co
 
 * Try `setsid` command to run the program in background, for example
 
-    $ setsid python3 main.py
+    setsid python3 main.py
     
 * If you want to kill a running job on the server, use `pkill -TERM -P THE_PID` to kill all its children processes in stead of `kill -9 THE_PID`.
