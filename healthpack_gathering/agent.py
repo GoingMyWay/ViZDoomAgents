@@ -8,37 +8,28 @@ import itertools as iter
 import numpy as np
 import tensorflow as tf
 
-
-import matplotlib
-gui_env = [i for i in matplotlib.rcsetup.interactive_bk]
-for gui in gui_env:
-    print("testing", gui)
-    try:
-        matplotlib.use(gui, warn=False, force=True)
-        from matplotlib import pyplot as plt
-        print("Using ..... ", matplotlib.get_backend())
-    except:
-        print("    ", gui, "Not found")
-
 from vizdoom import *
 
 import utils
-from . import network
-from . import configs as cfg
+import network
+import configs as cfg
 
 
 class Agent(object):
     """
     Agent
     """
-    def __init__(self, game, name, s_size, a_size, optimizer=None, model_path=None, global_episodes=None, play=False):
-        self.s_size = s_size
-        self.a_size = a_size
+    def __init__(self, game, name, optimizer=None, model_path=None,
+                 global_episodes=None, play=False, task_name='healthpack_simple'):
+        self.task_name = task_name
 
         self.summary_step = 3
 
         self.name = "worker_" + str(name)
         self.number = name
+
+        self.last_total_health = 100.
+        self.img_shape = cfg.IMG_SHAPE
 
         self.episode_reward = []
         self.episode_episode_total_pickes = []
@@ -53,17 +44,18 @@ class Agent(object):
             self.trainer = optimizer
             self.global_episodes = global_episodes
             self.increment = self.global_episodes.assign_add(1)
-            self.local_AC_network = network.ACNetwork(s_size, a_size, self.name, optimizer, play=play)
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, img_shape=cfg.IMG_SHAPE)
             self.summary_writer = tf.summary.FileWriter("./summaries/healthpack/train_health%s" % str(self.number))
-            self.update_local_ops = tf.group(*utils.update_target_graph('global', self.name))
+            self.update_local_ops = tf.group(*utils.update_target_graph(
+                self.task_name+'/global', self.task_name+'/'+self.name))
         else:
-            self.local_AC_network = network.ACNetwork(s_size, a_size, self.name, optimizer, play=play)
+            self.local_AC_network = network.ACNetwork(self.name, optimizer, play=play, img_shape=cfg.IMG_SHAPE)
         if not isinstance(game, DoomGame):
             raise TypeError("Type Error")
 
         # The Below code is related to setting up the Doom environment
         game = DoomGame()
-        game.set_doom_scenario_path("./scenarios/health_gathering.wad")
+        game.set_doom_scenario_path("../scenarios/{}".format('health_gathering_supreme.wad' if cfg.IS_SUPREME_VERSION else 'health_gathering.wad'))
         game.set_doom_map("map01")
         game.set_screen_resolution(ScreenResolution.RES_640X480)
         game.set_screen_format(ScreenFormat.RGB24)
@@ -105,10 +97,10 @@ class Agent(object):
         # Here we take the rewards and values from the rollout, and use them to
         # generate the advantage and discounted returns.
         # The advantage function uses "Generalized Advantage Estimation"
-        self.rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
-        discounted_rewards = utils.discount(self.rewards_plus, gamma)[:-1]
-        self.value_plus = np.asarray(values.tolist() + [bootstrap_value])
-        advantages = rewards + gamma * self.value_plus[1:] - self.value_plus[:-1]
+        rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
+        discounted_rewards = utils.discount(rewards_plus, gamma)[:-1]
+        value_plus = np.asarray(values.tolist() + [bootstrap_value])
+        advantages = rewards + gamma * value_plus[1:] - value_plus[:-1]
         advantages = utils.discount(advantages, gamma)
 
         # Update the global network using gradients from loss
@@ -149,12 +141,12 @@ class Agent(object):
                 last_total_picked_packs = 0
 
                 self.env.new_episode()
+                st_s = utils.process_frame(self.env.get_state().screen_buffer, self.img_shape)
+                s = np.stack((st_s, st_s, st_s, st_s), axis=2)
                 episode_st = time.time()
+
                 while not self.env.is_episode_finished():
 
-                    # if utils.check_play(self.env.get_state()):
-                    s = self.env.get_state().screen_buffer
-                    s = utils.process_frame(s, cfg.img_dim)
                     # Take an action using probabilities from policy network output.
                     a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
                                          feed_dict={self.local_AC_network.inputs: [s]})
@@ -174,8 +166,9 @@ class Agent(object):
                     if d:
                         s1 = s
                     else:  # game is not finished
-                        s1 = self.env.get_state().screen_buffer
-                        s1 = utils.process_frame(s1, cfg.img_dim)
+                        img = np.reshape(utils.process_frame(
+                            self.env.get_state().screen_buffer, self.img_shape), (*self.img_shape, 1))
+                        s1 = np.append(img, s[:, :, :3], axis=2)
 
                     episode_buffer.append([s, a_index, reward, s1, d, v[0, 0]])
                     episode_values.append(v[0, 0])
@@ -211,7 +204,7 @@ class Agent(object):
 
                 # Periodically save gifs of episodes, model parameters, and summary statistics.
                 if episode_count % 5 == 0 and episode_count != 0:
-                    if episode_count % 250 == 0 and self.name == 'worker_0':
+                    if episode_count % 50 == 0 and self.name == 'worker_0':
                         saver.save(sess, self.model_path+'/model-'+str(episode_count)+'.ckpt')
                         print("Episode count {}, saved Model, time costs {}".format(episode_count, time.time()-start_t))
                         start_t = time.time()
@@ -251,20 +244,26 @@ class Agent(object):
 
             self.env.new_episode()
             state = self.env.get_state()
-            s = utils.process_frame(state.screen_buffer, cfg.img_dim)
+            st_s = utils.process_frame(self.env.get_state().screen_buffer, self.img_shape)
+            s = np.stack((st_s, st_s, st_s, st_s), axis=2)
             episode_rewards = 0
             last_total_shaping_reward = 0
             step = 0
             s_t = time.time()
             while not self.env.is_episode_finished():
-                state = self.env.get_state()
-                s = utils.process_frame(state.screen_buffer, cfg.img_dim)
                 a_dist, v = sess.run([self.local_AC_network.policy, self.local_AC_network.value],
                                      feed_dict={self.local_AC_network.inputs: [s]})
                 # get a action_index from a_dist in self.local_AC.policy
                 a_index = self.choose_action_index(a_dist[0], deterministic=True)
                 # make an action
                 self.env.make_action(self.actions[a_index])
+
+                if self.env.is_episode_finished():
+                    break
+
+                img = utils.process_frame(self.env.get_state().screen_buffer, self.img_shape)
+                img = np.reshape(img, (*self.img_shape, 1))
+                s = np.append(img, s[:, :, :3], axis=2)
 
                 step += 1
 
@@ -298,7 +297,9 @@ class Agent(object):
         return len(policy) - 1
 
     def reward_function(self, picked_delta, episode_step_count):
-        health = self.env.get_game_variable(GameVariable.HEALTH)
+        reward, health = 0., self.env.get_game_variable(GameVariable.HEALTH)
+        health_delta = self.last_total_health - health
+        self.last_total_health = health
         if picked_delta == 0:
             # if run out of health before episode ends, give a punishment
             if health < 4 and episode_step_count < self.env.get_episode_timeout():
@@ -307,5 +308,7 @@ class Agent(object):
                 # alive
                 reward = 0.01
         else:
-            return picked_delta * 2.
+            reward = picked_delta * 3.
+        if health_delta >= 30:  # when collecting the vial
+            reward += -0.333 * health_delta
         return reward
