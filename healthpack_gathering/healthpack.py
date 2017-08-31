@@ -8,9 +8,9 @@ import tensorflow as tf
 
 from vizdoom import *
 
-from . import agent
-from . import network
-from . import configs as cfg
+import agent
+import network
+import configs as cfg
 
 max_episode_length = 2100
 gamma = .99  # discount rate for advantage estimation and reward discounting
@@ -27,22 +27,22 @@ def main_train(tf_configs=None):
     if not os.path.exists(cfg.model_path):
         os.makedirs(cfg.model_path)
 
-    with tf.device("/cpu:0"):
-        global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
+    global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
+    with tf.device("/gpu:0"):
         optimizer = tf.train.RMSPropOptimizer(learning_rate=1e-5)
-        master_network = network.ACNetwork(s_size, a_size, 'global', optimizer)  # Generate global network
-        num_workers = 8
+        global_network = network.ACNetwork('global', optimizer, img_shape=cfg.IMG_SHAPE)
+        num_workers = cfg.AGENTS_NUM
         agents = []
         # Create worker classes
         for i in range(num_workers):
-            agents.append(agent.Agent(DoomGame(), i, s_size, a_size, optimizer, model_path, global_episodes))
-        saver = tf.train.Saver(max_to_keep=100)
+            agents.append(agent.Agent(DoomGame(), i, s_size, a_size, optimizer, cfg.model_path, global_episodes))
+    saver = tf.train.Saver(max_to_keep=100)
 
     with tf.Session(config=tf_configs) as sess:
         coord = tf.train.Coordinator()
         if load_model:
             print('Loading Model...')
-            ckpt = tf.train.get_checkpoint_state(model_path)
+            ckpt = tf.train.get_checkpoint_state(cfg.model_path)
             saver.restore(sess, ckpt.model_checkpoint_path)
         else:
             sess.run(tf.global_variables_initializer())
@@ -65,12 +65,12 @@ def main_play(tf_configs=None):
 
     with tf.Session(config=tf_configs) as sess:
 
-        ag = agent.Agent(DoomGame(), 0, s_size, a_size, play=True)
+        ag = agent.Agent(DoomGame(), 0, play=True)
 
         print('Loading Model...')
         saver = tf.train.Saver()
         ckpt = tf.train.get_checkpoint_state(cfg.model_path)
-        saver.restore(sess, os.path.join(cfg.model_path, 'model-1750.ckpt'))
+        saver.restore(sess, os.path.join(cfg.model_path, cfg.model_file))
         print('Successfully loaded!')
 
         ag.play_game(sess, 10)
@@ -78,7 +78,7 @@ def main_play(tf_configs=None):
 
 if __name__ == '__main__':
 
-    train = False
+    train = cfg.IS_TRAIN
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     if train:
