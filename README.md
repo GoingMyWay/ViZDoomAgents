@@ -38,6 +38,9 @@ The contents in both `configs.py` and shell scripts are self-explained.
 
 The `check_point` directory stores checkpoint data of the neural network in each specific step, and the `summaries` 
 directory stores events files contain data while helps developers to understand what's going on with the model only during training stage.
+You can use `tensorboard` command to visualise the data, for example
+
+    setsid tensorboard --logdir=D3_battle --port=7400 > logs.D3_battle 2>&1
 
 Note that, if you want to train the model, no GUI will be prompted out since game window will not visible as you can see
  in the code `game.set_window_visible(self.play)`, when training `self.play` is `False`.
