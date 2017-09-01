@@ -61,6 +61,22 @@ The code of A3C framework was modified from [awjuliani's repo](https://github.co
     
 * If you want to kill a running job on the server, use `pkill -TERM -P THE_PID` to kill all its children processes in stead of `kill -9 THE_PID`.
 
+#### Some useful commands
+
+* Get the runing processes' directory
+
+
+    $ for id in `ps -ef | grep main.py | awk '{print $2}'`; do ls -l /proc/${id}/cwd ; done    
+    ls: cannot access /proc/10800/cwd: No such file or directory
+    lrwxrwxrwx 1 doom doom 0 Aug 30 23:19 /proc/23963/cwd -> /home/doom/Code/battle_new
+    lrwxrwxrwx 1 doom doom 0 Aug 29 19:30 /proc/38867/cwd -> /home/doom/Code/battle
+    lrwxrwxrwx 1 doom doom 0 Sep  2 00:10 /proc/39261/cwd -> /home/doom/Code/battle_decay
+    lrwxrwxrwx 1 doom doom 0 Sep  2 00:10 /proc/39706/cwd -> /home/doom/Code/battle_new_2
+
+* Get the utilization of GPU for every 5 seconds
+
+    while true; do nvidia-smi --query-gpu=utilization.memory --format=csv && nvidia-smi --query-gpu=utilization.gpu --format=csv; sleep 5; done
+
 
 #### Some helpful links
 
