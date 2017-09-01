@@ -63,8 +63,7 @@ The code of A3C framework was modified from [awjuliani's repo](https://github.co
 
 #### Some useful commands
 
-* Get the runing processes' directory
-
+Get the runing processes' directory
 
     $ for id in `ps -ef | grep main.py | awk '{print $2}'`; do ls -l /proc/${id}/cwd ; done    
     ls: cannot access /proc/10800/cwd: No such file or directory
@@ -73,7 +72,7 @@ The code of A3C framework was modified from [awjuliani's repo](https://github.co
     lrwxrwxrwx 1 doom doom 0 Sep  2 00:10 /proc/39261/cwd -> /home/doom/Code/battle_decay
     lrwxrwxrwx 1 doom doom 0 Sep  2 00:10 /proc/39706/cwd -> /home/doom/Code/battle_new_2
 
-* Get the utilization of GPU for every 5 seconds
+Get the utilization of GPU for every 5 seconds
 
     while true; do nvidia-smi --query-gpu=utilization.memory --format=csv && nvidia-smi --query-gpu=utilization.gpu --format=csv; sleep 5; done
 
