@@ -75,6 +75,10 @@ Get the runing processes' directory
 Get the utilization of GPU for every 5 seconds
 
     while true; do nvidia-smi --query-gpu=utilization.memory --format=csv && nvidia-smi --query-gpu=utilization.gpu --format=csv; sleep 5; done
+    
+#### Videos
+
+You can watch the videos of the results on [Youtube](https://www.youtube.com/channel/UCn_UdbGa4DaxBsOYNGMfnHg?view_as=subscriber).
 
 
 #### Some helpful links
