@@ -76,11 +76,6 @@ Get the utilization of GPU for every 5 seconds
 
     while true; do nvidia-smi --query-gpu=utilization.memory --format=csv && nvidia-smi --query-gpu=utilization.gpu --format=csv; sleep 5; done
     
-#### Videos
-
-You can watch the videos of the results on [Youtube](https://www.youtube.com/channel/UCn_UdbGa4DaxBsOYNGMfnHg?view_as=subscriber).
-
-
 #### Some helpful links
 
 * [tensorflow-how-can-i-restore-model-when-some-new-layers-are-added](https://stackoverflow.com/questions/45487323/tensorflow-how-can-i-restore-model-when-some-new-layers-are-added)
@@ -88,3 +83,9 @@ You can watch the videos of the results on [Youtube](https://www.youtube.com/cha
 * [python3-importerror-no-module-named-tkinter-on-ubuntu](https://stackoverflow.com/questions/44237302/python3-importerror-no-module-named-tkinter-on-ubuntu)
 * [after-building-tensorflow-from-source-seeing-libcudart-so-and-libcudnn-errors](https://stackoverflow.com/questions/42013316/after-building-tensorflow-from-source-seeing-libcudart-so-and-libcudnn-errors/44147506#44147506)
 * [TensorFlow](https://www.tensorflow.org)
+
+### Videos
+
+You can watch the videos of the results on [Youtube](https://www.youtube.com/channel/UCn_UdbGa4DaxBsOYNGMfnHg?view_as=subscriber).
+
+
